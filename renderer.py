@@ -60,7 +60,6 @@ def draw_frame(frame, chart_data, approach_time=0.7):
             # determines when the note starts appearing
             spawn_time = note_time - approach_time
             spawn_radius = 30
-            hit_radius = radius
 
             if note_type != "HOLD":
                 # checks if note is still on screen, and calculates how far the note is
@@ -69,7 +68,7 @@ def draw_frame(frame, chart_data, approach_time=0.7):
                     progress = max(0.0, min(1.0, progress))
 
                     # determines where the note should spawn
-                    r = spawn_radius + progress * (hit_radius - spawn_radius)
+                    r = spawn_radius + progress * (radius - spawn_radius)
 
                     x, y = lane_to_xy(lane, center, r)
 
@@ -80,19 +79,20 @@ def draw_frame(frame, chart_data, approach_time=0.7):
                         draw.ellipse((x-30, y-30, x+30, y+30), outline="#ff69b4", width=7)
 
             elif note_type == "HOLD":
+                width = 28
+                tip = 28
+                head_radius = 30
+                tip_push = 12
                 hold_end_time = note_time + hold_time
 
-                if spawn_time <= current_time <= hold_end_time:
+                if spawn_time <= current_time < hold_end_time:
 
                     # head progress
                     head_progress = (current_time - spawn_time) / approach_time
                     head_progress = max(0.0, min(1.0, head_progress))
 
-                    head_r = spawn_radius + head_progress * (hit_radius - spawn_radius)
+                    head_r = spawn_radius + head_progress * (radius - spawn_radius)
                     head_x, head_y = lane_to_xy(lane, center, head_r)
-
-                    draw.ellipse((head_x-30, head_y-30, head_x+30, head_y+30),
-                                outline="#ff69b4", width=7)
 
                     # tail progress
                     tail_spawn_time = hold_end_time - approach_time
@@ -103,16 +103,56 @@ def draw_frame(frame, chart_data, approach_time=0.7):
                         tail_progress = (current_time - tail_spawn_time) / approach_time
 
                     tail_progress = max(0.0, min(1.0, tail_progress))
+                    tail_stop = radius - (tip - tip_push)
 
-                    tail_r = spawn_radius + tail_progress * (hit_radius - spawn_radius)
+                    tail_r = spawn_radius + tail_progress * (tail_stop - spawn_radius)
+                    tail_r = min(tail_r, radius)
                     tail_x, tail_y = lane_to_xy(lane, center, tail_r)
 
                     # drawer (drawer, it draws)
-                    draw.line((tail_x, tail_y, head_x, head_y),
-                            fill="#32cd32", width=12)
+                    dx = head_x - tail_x
+                    dy = head_y - tail_y
+                    length = math.hypot(dx, dy)
 
-                    draw.ellipse((tail_x-20, tail_y-20, tail_x+20, tail_y+20),
-                                outline="#32cd32", width=5)
+                    if length > 0:
+                        ux = dx / length
+                        uy = dy / length
+
+                        px = -uy
+                        py = ux
+
+                        # move tail center backward so the hex ends on the ring
+                        tail_center_x = tail_x - ux * tip
+                        tail_center_y = tail_y - uy * tip
+
+                        # tail geometry
+                        tail_tip = (tail_center_x, tail_center_y)
+                        tail_base = (
+                            tail_center_x + ux * tip,
+                            tail_center_y + uy * tip
+                        )
+
+                        # head geometry
+                        head_tip = (
+                            head_x + ux * (head_radius + tip_push),
+                            head_y + uy * (head_radius + tip_push)
+                        )
+
+                        head_base = (
+                            head_tip[0] - ux * tip,
+                            head_tip[1] - uy * tip
+                        )
+
+                        points = [
+                            tail_tip,
+                            (tail_base[0] - px * width, tail_base[1] - py * width),
+                            (head_base[0] - px * width, head_base[1] - py * width),
+                            head_tip,
+                            (head_base[0] + px * width, head_base[1] + py * width),
+                            (tail_base[0] + px * width, tail_base[1] + py * width),
+                        ]
+
+                        draw.polygon(points, outline="#ff69b4", width=6)
     
     return img
 
