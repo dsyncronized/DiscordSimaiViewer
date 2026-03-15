@@ -6,10 +6,6 @@ import asyncio
 from renderer import draw_frame, render_chart
 from discord.ext import commands
 
-# discord bot
-
-print(discord.__version__)
-
 intents = discord.Intents.default()
 intents.message_content = True
 
@@ -23,6 +19,7 @@ async def on_ready():
 async def simai(ctx, notation: discord.Option(str), approach_time: float = 0.7):
     await ctx.respond("Rendering...")
 
+    # add difficulty because the parser needs it
     notation = "&inote_1=\n" + notation
     chart = core.SimaiChart()
     chart.load_from_text(notation)
@@ -33,15 +30,17 @@ async def simai(ctx, notation: discord.Option(str), approach_time: float = 0.7):
 
     await asyncio.to_thread(render_chart, chart_data, approach_time)
 
-    await ctx.interaction.edit_original_response(content="Done!")
-    await ctx.send(file=discord.File("chart.mp4"))
+    await ctx.send(content=f"Requested by <@{ctx.author.id}>", file=discord.File("chart.mp4"))
+    await ctx.interaction.edit_original_response(content=f"Done!")
 
-    with open("chart_data.json", "w", encoding="utf-8") as f:
-        json.dump(chart_data, f, ensure_ascii=False, indent=4)
-    with open("data.json", "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    ## FOR DEBUGGING CHART DATA ##
 
-    await ctx.send(file=discord.File("chart_data.json"))
-    await ctx.send(file=discord.File("data.json"))
+    # with open("chart_data.json", "w", encoding="utf-8") as f:
+    #     json.dump(chart_data, f, ensure_ascii=False, indent=4)
+    # with open("data.json", "w", encoding="utf-8") as f:
+    #     json.dump(data, f, ensure_ascii=False, indent=4)
+
+    # await ctx.send(file=discord.File("chart_data.json"))
+    # await ctx.send(file=discord.File("data.json"))
     
 bot.run('your bot token here')
