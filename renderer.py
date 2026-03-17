@@ -2,11 +2,15 @@ import math
 import numpy as np
 import imageio
 from PIL import Image, ImageDraw
+import os
+
+os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/bin/ffmpeg"
 
 center = (400, 400)
 radius = 380
 FPS = 30
 start_delay = 2.0 # seconds
+approach_time = 0.6
 
 # determines lane position
 def lane_to_xy(lane, center, radius):
@@ -26,12 +30,10 @@ def pentagram_points(center_x, center_y, radius):
     order = [0, 2, 4, 1, 3, 0]
     return [points[i] for i in order]
 
-def draw_frame(frame, chart_data, approach_time=0.7):
-    # draw background
-    img = Image.new("RGB", (800, 800), "#20202a")
+def create_background():
+    img = Image.new("RGB", (800,800), "#20202a")
     draw = ImageDraw.Draw(img)
 
-    # draw inner ring
     draw.ellipse(
         (center[0]-radius, center[1]-radius,
          center[0]+radius, center[1]+radius),
@@ -39,10 +41,17 @@ def draw_frame(frame, chart_data, approach_time=0.7):
         width=5
     )
 
-    # draw lane dots
-    for lane in range(1, 9):
-        x, y = lane_to_xy(lane, center, radius)
-        draw.ellipse([x-10, y-10, x+10, y+10], fill="#c6d0e9")
+    for lane in range(1,9):
+        x,y = lane_to_xy(lane,center,radius)
+        draw.ellipse([x-10,y-10,x+10,y+10], fill="#c6d0e9")
+
+    return img
+
+background = create_background()
+
+def draw_frame(frame, chart_data, approach_time):
+    img = background.copy()
+    draw = ImageDraw.Draw(img)
 
     current_time = frame / FPS
     
@@ -50,7 +59,8 @@ def draw_frame(frame, chart_data, approach_time=0.7):
     for event in chart_data:
         note_time = event["time"] + start_delay
 
-        # getting note data
+        # getting note data (the parser for some reason doesnt have a check for each notes lmao)
+        raw_note = event["notes_content_raw"]
         for note in event["notes"]:
             lane = note["start_position"]
             note_type = note.get("note_type")
@@ -74,9 +84,16 @@ def draw_frame(frame, chart_data, approach_time=0.7):
 
                     if note_type == "SLIDE":
                         star_points = pentagram_points(x, y, 30)
-                        draw.line(star_points, fill="#1e90ff", width=7)
+                        if "/" in raw_note:
+                            draw.line(star_points, fill="#ffdf2b", width=7)
+                        else:
+                            draw.line(star_points, fill="#1e90ff", width=7)
+
                     elif note_type == "TAP":
-                        draw.ellipse((x-30, y-30, x+30, y+30), outline="#ff69b4", width=7)
+                        if "/" in raw_note:
+                            draw.ellipse((x-30, y-30, x+30, y+30), outline="#ffdf2b", width=7)
+                        else:
+                            draw.ellipse((x-30, y-30, x+30, y+30), outline="#ff69b4", width=7)
 
             elif note_type == "HOLD":
                 width = 28
@@ -121,7 +138,7 @@ def draw_frame(frame, chart_data, approach_time=0.7):
                         px = -uy
                         py = ux
 
-                        # move tail center backward so the hex ends on the ring
+                        # move tail center backward so the hex doesnt do that sorta thing
                         tail_center_x = tail_x - ux * tip
                         tail_center_y = tail_y - uy * tip
 
@@ -143,6 +160,7 @@ def draw_frame(frame, chart_data, approach_time=0.7):
                             head_tip[1] - uy * tip
                         )
 
+                        # yes, more math!
                         points = [
                             tail_tip,
                             (tail_base[0] - px * width, tail_base[1] - py * width),
@@ -152,7 +170,10 @@ def draw_frame(frame, chart_data, approach_time=0.7):
                             (tail_base[0] + px * width, tail_base[1] + py * width),
                         ]
 
-                        draw.polygon(points, outline="#ff69b4", width=6)
+                        if "/" in raw_note:
+                            draw.polygon(points, outline="#ffdf2b", width=6)
+                        else:
+                            draw.polygon(points, outline="#ff69b4", width=6)
     
     return img
 
@@ -168,12 +189,21 @@ def get_chart_duration(chart_data):
             
     return latest + start_delay + 2
 
-def render_chart(chart_data, approach_time=0.7):
+def render_chart(chart_data, approach_time):
     FPS = 30
     duration = duration = get_chart_duration(chart_data)
     total_frames = int(duration * FPS)
 
-    writer = imageio.get_writer("chart.mp4", fps=FPS)
+    target_size_mb = 8
+    bitrate_mbps = (target_size_mb * 8) / duration  # megabits/sec
+    bitrate = f"{bitrate_mbps:.2f}M"
+
+    writer = imageio.get_writer(
+        "chart.mp4", # chart slop!
+        fps=FPS, # frame slop!
+        codec="h264_nvenc", # gpu encoding slop!
+        bitrate = bitrate, # bitrate slop!
+    )
 
     for frame in range(total_frames):
         img = draw_frame(frame, chart_data, approach_time)
